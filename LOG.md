@@ -2,6 +2,7 @@
 
 ## 2026-09-05
 
+- Integrated into ~/gokivego as a git subtree from `898f8e3`. Nested `.git` removed. Do not `git subtree push` until marketplace [issue #5026](https://github.com/omacom/omarchy-plugin-marketplace/issues/5026) is `approved-and-verified`.
 - v1.2.0. Quota rows name the pool class (`Flash + Pro`, `Opus + Sonnet + GPT-OSS`) so stock `LimitRow` does not elide version lists.
 - Hero plan is Cloud Code `loadCodeAssist` `paidTier.name` (the AGY console plan). `forceTier` in `~/.config/omarchy/agents/antigravity.json` can pin it.
 - Antigravity has no daily token API. TOKENS BY DAY is the same transcript walk as TOKENS BY MODEL, with a 45-day ledger at `~/.cache/omarchy/agent-usage/antigravity-daily.json`.
