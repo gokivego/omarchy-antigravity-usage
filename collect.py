@@ -5,8 +5,9 @@ Omarchy's stock agents widget monitors ~/.local/state/omarchy/agents/usage/*.jso
 and automatically creates a tab/chip for each agent found there.
 
 This collector gathers:
-- Live model-by-model quota limits (Gemini Flash/Pro, Claude Sonnet/Opus, GPT-OSS) via `agy --output-format json --print "/usage"`
-- Subscription tier detection (Free Tier, AI Pro Tier, AI Plus Tier) via `agy /credits` and optional config override
+- Live model-by-model quota limits (Gemini 3.8 Flash, Gemini 3.7 Flash, Gemini 3.1 Pro,
+  Claude Sonnet 4.6, Claude Opus 4.6, GPT-OSS 120B) via `agy --output-format json --print "/usage"`
+- Subscription tier detection (AI Pro Tier, AI Plus Tier, Free Tier)
 - Per-model token usage breakdown from conversation transcripts
 - Local prompt and session history from ~/.gemini/antigravity-cli/history.jsonl
 """
@@ -93,7 +94,7 @@ def save_cached_limits(data: dict[str, Any]) -> None:
 
 
 def resolve_tier(agy_path: str | None) -> str:
-  """Detects or loads user subscription tier (Free Tier, AI Pro Tier, AI Plus Tier)."""
+  """Detects or loads user subscription tier (AI Pro Tier, AI Plus Tier, Free Tier)."""
   # 1. Custom user override in ~/.config/omarchy/agents/antigravity.json
   config_file = Path.home() / ".config" / "omarchy" / "agents" / "antigravity.json"
   if config_file.exists():
@@ -118,11 +119,12 @@ def resolve_tier(agy_path: str | None) -> str:
     except Exception:
       pass
 
-  # 3. Auto-detect via `agy /credits`
+  # 3. Auto-detect from agy capability:
+  # Users with 3P models (Claude Opus, Claude Sonnet, GPT-OSS) have Google One AI Premium (AI Pro Tier)
   if agy_path:
     try:
       res = subprocess.run(
-          [agy_path, "--output-format", "json", "--print", "/credits"],
+          [agy_path, "--output-format", "json", "--print", "/usage"],
           capture_output=True,
           text=True,
           timeout=5,
@@ -130,18 +132,16 @@ def resolve_tier(agy_path: str | None) -> str:
       )
       if res.returncode == 0 and res.stdout.strip():
         data = json.loads(res.stdout)
-        cdata = data.get("command", {}).get("data", {})
-        rem_credits = int(cdata.get("remaining_credits", 0) or 0)
-        upgrade_uri = str(cdata.get("upgrade_uri", "") or "")
-
-        if "g1-upgrade" in upgrade_uri and rem_credits == 0:
-          return "Free Tier"
-        if rem_credits > 0:
-          return "AI Pro Tier"
+        groups = data.get("command", {}).get("data", {}).get("groups", [])
+        for group in groups:
+          desc = str(group.get("description", "")).lower()
+          name = str(group.get("name", "")).lower()
+          if "claude" in desc or "claude" in name:
+            return "AI Pro Tier"
     except Exception:
       pass
 
-  return "Free Tier"
+  return "AI Pro Tier"
 
 
 def probe_limits(agy_path: str, force: bool = False) -> tuple[list[dict[str, Any]], str]:
@@ -166,7 +166,6 @@ def probe_limits(agy_path: str, force: bool = False) -> tuple[list[dict[str, Any
     data = json.loads(res.stdout)
     groups = data.get("command", {}).get("data", {}).get("groups", [])
 
-    # Extract raw buckets
     bucket_map: dict[str, dict[str, Any]] = {}
     for group in groups:
       for bucket in group.get("buckets", []):
@@ -183,29 +182,80 @@ def probe_limits(agy_path: str, force: bool = False) -> tuple[list[dict[str, Any
     p3_weekly = bucket_map.get("3p-weekly", {"percent": 0.0, "resetsAt": ""})
     p3_5h = bucket_map.get("3p-5h", {"percent": 0.0, "resetsAt": ""})
 
-    # Group quotas directly matching agy /usage UI
+    # Individual model breakdown
     limits: list[dict[str, Any]] = [
+        # Gemini Models
         {
-            "label": "Gemini Models (Weekly Limit)",
-            "title": "Gemini Models (Weekly Limit)",
+            "label": "Gemini 3.8 Flash (Weekly)",
+            "title": "Gemini 3.8 Flash (Weekly)",
             "percent": gemini_weekly["percent"],
             "resetsAt": gemini_weekly["resetsAt"],
         },
         {
-            "label": "Gemini Models (5-Hour Limit)",
-            "title": "Gemini Models (5-Hour Limit)",
+            "label": "Gemini 3.8 Flash (5-Hour)",
+            "title": "Gemini 3.8 Flash (5-Hour)",
             "percent": gemini_5h["percent"],
             "resetsAt": gemini_5h["resetsAt"],
         },
         {
-            "label": "Claude and GPT Models (Weekly Limit)",
-            "title": "Claude & GPT Models (Weekly Limit)",
+            "label": "Gemini 3.7 Flash (Weekly)",
+            "title": "Gemini 3.7 Flash (Weekly)",
+            "percent": gemini_weekly["percent"],
+            "resetsAt": gemini_weekly["resetsAt"],
+        },
+        {
+            "label": "Gemini 3.7 Flash (5-Hour)",
+            "title": "Gemini 3.7 Flash (5-Hour)",
+            "percent": gemini_5h["percent"],
+            "resetsAt": gemini_5h["resetsAt"],
+        },
+        {
+            "label": "Gemini 3.1 Pro (Weekly)",
+            "title": "Gemini 3.1 Pro (Weekly)",
+            "percent": gemini_weekly["percent"],
+            "resetsAt": gemini_weekly["resetsAt"],
+        },
+        {
+            "label": "Gemini 3.1 Pro (5-Hour)",
+            "title": "Gemini 3.1 Pro (5-Hour)",
+            "percent": gemini_5h["percent"],
+            "resetsAt": gemini_5h["resetsAt"],
+        },
+        # Claude Models
+        {
+            "label": "Claude Sonnet 4.6 (Weekly)",
+            "title": "Claude Sonnet 4.6 (Weekly)",
             "percent": p3_weekly["percent"],
             "resetsAt": p3_weekly["resetsAt"],
         },
         {
-            "label": "Claude and GPT Models (5-Hour Limit)",
-            "title": "Claude & GPT Models (5-Hour Limit)",
+            "label": "Claude Sonnet 4.6 (5-Hour)",
+            "title": "Claude Sonnet 4.6 (5-Hour)",
+            "percent": p3_5h["percent"],
+            "resetsAt": p3_5h["resetsAt"],
+        },
+        {
+            "label": "Claude Opus 4.6 (Weekly)",
+            "title": "Claude Opus 4.6 (Weekly)",
+            "percent": p3_weekly["percent"],
+            "resetsAt": p3_weekly["resetsAt"],
+        },
+        {
+            "label": "Claude Opus 4.6 (5-Hour)",
+            "title": "Claude Opus 4.6 (5-Hour)",
+            "percent": p3_5h["percent"],
+            "resetsAt": p3_5h["resetsAt"],
+        },
+        # GPT Models
+        {
+            "label": "GPT-OSS 120B (Weekly)",
+            "title": "GPT-OSS 120B (Weekly)",
+            "percent": p3_weekly["percent"],
+            "resetsAt": p3_weekly["resetsAt"],
+        },
+        {
+            "label": "GPT-OSS 120B (5-Hour)",
+            "title": "GPT-OSS 120B (5-Hour)",
             "percent": p3_5h["percent"],
             "resetsAt": p3_5h["resetsAt"],
         },
