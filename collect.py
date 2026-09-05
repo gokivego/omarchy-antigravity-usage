@@ -183,67 +183,29 @@ def probe_limits(agy_path: str, force: bool = False) -> tuple[list[dict[str, Any
     p3_weekly = bucket_map.get("3p-weekly", {"percent": 0.0, "resetsAt": ""})
     p3_5h = bucket_map.get("3p-5h", {"percent": 0.0, "resetsAt": ""})
 
-    # Clear, model-specific breakdown requested by user
+    # Group quotas directly matching agy /usage UI
     limits: list[dict[str, Any]] = [
-        # Gemini Models (1P)
         {
-            "label": "Gemini 3.8 Flash (Weekly)",
-            "title": "Gemini 3.8 Flash (Weekly)",
+            "label": "Gemini Models (Weekly Limit)",
+            "title": "Gemini Models (Weekly Limit)",
             "percent": gemini_weekly["percent"],
             "resetsAt": gemini_weekly["resetsAt"],
         },
         {
-            "label": "Gemini 3.8 Flash (5-Hour)",
-            "title": "Gemini 3.8 Flash (5-Hour)",
+            "label": "Gemini Models (5-Hour Limit)",
+            "title": "Gemini Models (5-Hour Limit)",
             "percent": gemini_5h["percent"],
             "resetsAt": gemini_5h["resetsAt"],
         },
         {
-            "label": "Gemini 3.1 Pro (Weekly)",
-            "title": "Gemini 3.1 Pro (Weekly)",
-            "percent": gemini_weekly["percent"],
-            "resetsAt": gemini_weekly["resetsAt"],
-        },
-        {
-            "label": "Gemini 3.1 Pro (5-Hour)",
-            "title": "Gemini 3.1 Pro (5-Hour)",
-            "percent": gemini_5h["percent"],
-            "resetsAt": gemini_5h["resetsAt"],
-        },
-        # 3P Models
-        {
-            "label": "Claude Sonnet 4.6 (Weekly)",
-            "title": "Claude Sonnet 4.6 (Weekly)",
+            "label": "Claude and GPT Models (Weekly Limit)",
+            "title": "Claude & GPT Models (Weekly Limit)",
             "percent": p3_weekly["percent"],
             "resetsAt": p3_weekly["resetsAt"],
         },
         {
-            "label": "Claude Sonnet 4.6 (5-Hour)",
-            "title": "Claude Sonnet 4.6 (5-Hour)",
-            "percent": p3_5h["percent"],
-            "resetsAt": p3_5h["resetsAt"],
-        },
-        {
-            "label": "Claude Opus 4.6 (Weekly)",
-            "title": "Claude Opus 4.6 (Weekly)",
-            "percent": p3_weekly["percent"],
-            "resetsAt": p3_weekly["resetsAt"],
-        },
-        {
-            "label": "Claude Opus 4.6 (5-Hour)",
-            "title": "Claude Opus 4.6 (5-Hour)",
-            "percent": p3_5h["percent"],
-            "resetsAt": p3_5h["resetsAt"],
-        },
-        {
-            "label": "GPT-OSS 120B (Weekly)",
-            "title": "GPT-OSS 120B (Weekly)",
-            "percent": p3_weekly["percent"],
-            "resetsAt": p3_weekly["resetsAt"],
-        },
-        {
-            "label": "GPT-OSS 120B (5-Hour)",
-            "title": "GPT-OSS 120B (5-Hour)",
+            "label": "Claude and GPT Models (5-Hour Limit)",
+            "title": "Claude & GPT Models (5-Hour Limit)",
             "percent": p3_5h["percent"],
             "resetsAt": p3_5h["resetsAt"],
         },
