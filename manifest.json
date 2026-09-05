@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "io.github.gokivego.antigravity-usage",
   "name": "Antigravity Usage",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "author": "Venkat Gokul Reddy Palampally",
   "license": "MIT",
-  "description": "Adds Google Antigravity (agy) to Omarchy's existing AI toolbar widget (the stock AI icon).",
+  "description": "Adds Google Antigravity (agy) to Omarchy's existing AI toolbar widget, with shared quota pools and the console plan.",
   "kinds": ["service"],
   "keepLoaded": true,
   "entryPoints": {
