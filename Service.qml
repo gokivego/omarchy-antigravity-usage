@@ -17,6 +17,8 @@ Item {
   readonly property string stateHome: Quickshell.env("XDG_STATE_HOME") || (home + "/.local/state")
   readonly property string claudeRecord: stateHome + "/omarchy/agents/usage/claude.json"
 
+  onPluginDirChanged: if (pluginDir !== "") root.collect(false)
+
   function collect(force) {
     if (pluginDir === "" || collectProcess.running) return
     var cmd = ["python3", collector, "--write"]
@@ -61,6 +63,4 @@ Item {
     id: clearProcess
     running: false
   }
-
-  Component.onDestruction: root.clearRecord()
 }
