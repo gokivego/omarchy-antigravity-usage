@@ -11,14 +11,27 @@ Item {
   property var manifest: null
   property var shell: null
 
-  readonly property string pluginDir: manifest && manifest.__sourceDir ? String(manifest.__sourceDir) : ""
-  readonly property string collector: pluginDir + "/collect.py"
   readonly property string home: Quickshell.env("HOME") || ""
   readonly property string stateHome: Quickshell.env("XDG_STATE_HOME") || (home + "/.local/state")
-  readonly property string claudeRecord: stateHome + "/omarchy/agents/usage/claude.json"
+
+  readonly property string pluginDir: {
+    if (manifest && manifest.__sourceDir) return String(manifest.__sourceDir)
+    var url = String(Qt.resolvedUrl("."))
+    var path = decodeURIComponent(url.replace(/^file:\/\//, "")).replace(/\/$/, "")
+    if (path !== "" && path !== ".") return path
+    var id = manifest && manifest.id ? manifest.id : "io.github.gokivego.antigravity-usage"
+    return home + "/.config/omarchy/plugins/" + id
+  }
+
+  readonly property string collector: {
+    var url = String(Qt.resolvedUrl("collect.py"))
+    var path = decodeURIComponent(url.replace(/^file:\/\//, ""))
+    if (path !== "" && path !== "collect.py") return path
+    return pluginDir + "/collect.py"
+  }
 
   function collect(force) {
-    if (pluginDir === "" || collectProcess.running) return
+    if (collector === "" || collectProcess.running) return
     var cmd = ["python3", collector, "--write"]
     if (force === true) cmd.push("--force")
     collectProcess.command = cmd
@@ -26,7 +39,7 @@ Item {
   }
 
   function clearRecord() {
-    if (pluginDir === "") return
+    if (collector === "") return
     clearProcess.command = ["python3", collector, "--clear"]
     clearProcess.running = true
   }
@@ -37,6 +50,14 @@ Item {
     repeat: true
     triggeredOnStart: true
     onTriggered: root.collect(false)
+  }
+
+  IpcHandler {
+    target: "io.github.gokivego.antigravity-usage"
+    function refresh(): string {
+      root.collect(true)
+      return "ok"
+    }
   }
 
   // Stock panel refresh rewrites claude.json. Use that as a cue so Antigravity
@@ -61,6 +82,4 @@ Item {
     id: clearProcess
     running: false
   }
-
-  Component.onDestruction: root.clearRecord()
 }
