@@ -118,10 +118,18 @@ def agy_json(agy_path: str, extra_args: list[str], timeout: float) -> dict[str, 
     return None
   if res.returncode != 0 or not res.stdout.strip():
     return None
+  stdout = res.stdout.strip()
   try:
-    data = json.loads(res.stdout)
+    data = json.loads(stdout)
   except json.JSONDecodeError:
-    return None
+    idx = stdout.find("{")
+    if idx != -1:
+      try:
+        data = json.loads(stdout[idx:])
+      except json.JSONDecodeError:
+        return None
+    else:
+      return None
   return data if isinstance(data, dict) else None
 
 
