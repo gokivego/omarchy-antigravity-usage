@@ -30,9 +30,12 @@ AGENT_ID = "antigravity"
 AGENT_NAME = "Antigravity"
 AUTH_HELP = "Run `agy` in your terminal to authenticate."
 LIMITS_CACHE_SECONDS = 180.0
+PROBE_TIMEOUT = 30.0
+MODELS_TIMEOUT = 20.0
 MAX_HTTP_BODY_BYTES = 256 * 1024
 LOAD_CODE_ASSIST_URL = "https://daily-cloudcode-pa.googleapis.com/v1internal:loadCodeAssist"
 EFFORT_SUFFIX = re.compile(r"\s*\((?:High|Medium|Low|Thinking)\)\s*$", re.IGNORECASE)
+AUTH_ERROR_RE = re.compile(r"not logged into|not authenticated|not signed in|please sign in", re.IGNORECASE)
 GROUP_MODELS_MARKER = "Models within this group:"
 MODEL_SELECTION_RE = re.compile(
     r"Model Selection` from (?:None|\w+) to ([\w\s\.\(\)-]+)\."
@@ -105,32 +108,48 @@ def save_cached_limits(data: dict[str, Any]) -> None:
     pass
 
 
-def agy_json(agy_path: str, extra_args: list[str], timeout: float) -> dict[str, Any] | None:
-  try:
-    res = subprocess.run(
-        [agy_path, "--output-format", "json", *extra_args],
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        check=False,
-    )
-  except (subprocess.TimeoutExpired, OSError):
-    return None
-  if res.returncode != 0 or not res.stdout.strip():
-    return None
-  stdout = res.stdout.strip()
-  try:
-    data = json.loads(stdout)
-  except json.JSONDecodeError:
-    idx = stdout.find("{")
-    if idx != -1:
-      try:
-        data = json.loads(stdout[idx:])
-      except json.JSONDecodeError:
-        return None
-    else:
-      return None
-  return data if isinstance(data, dict) else None
+def agy_json(
+    agy_path: str,
+    extra_args: list[str],
+    timeout: float,
+    attempts: int = 1,
+) -> tuple[dict[str, Any] | None, str]:
+  last_error = ""
+  for _ in range(max(1, attempts)):
+    try:
+      res = subprocess.run(
+          [agy_path, "--output-format", "json", *extra_args],
+          capture_output=True,
+          text=True,
+          timeout=timeout,
+          check=False,
+      )
+    except subprocess.TimeoutExpired:
+      last_error = f"agy timed out after {timeout:.0f}s"
+      continue
+    except OSError as exc:
+      return None, str(exc)
+    if res.returncode != 0 or not res.stdout.strip():
+      last_error = (res.stderr or "").strip() or f"agy exited with code {res.returncode}"
+      continue
+    stdout = res.stdout.strip()
+    try:
+      data = json.loads(stdout)
+    except json.JSONDecodeError:
+      idx = stdout.find("{")
+      data = None
+      if idx != -1:
+        try:
+          data = json.loads(stdout[idx:])
+        except json.JSONDecodeError:
+          data = None
+      if data is None:
+        last_error = "agy returned output that is not JSON"
+        continue
+    if isinstance(data, dict):
+      return data, ""
+    last_error = "agy returned unexpected JSON"
+  return None, last_error
 
 
 def family_label(label: str) -> str:
@@ -195,7 +214,7 @@ def pool_member_name(label: str) -> str:
 
 
 def catalog_models(agy_path: str) -> list[dict[str, str]]:
-  data = agy_json(agy_path, ["models"], timeout=12)
+  data, _ = agy_json(agy_path, ["models"], timeout=MODELS_TIMEOUT)
   if not data:
     return []
   models = data.get("command", {}).get("data", {}).get("models")
@@ -346,6 +365,13 @@ def read_oauth_creds() -> dict[str, Any] | None:
   return None
 
 
+def signed_in() -> bool:
+  creds = read_oauth_creds()
+  if not creds:
+    return False
+  return bool(str(creds.get("access_token") or "").strip())
+
+
 def fetch_console_plan() -> str:
   """Return the plan name from the same Cloud Code call the AGY console uses."""
   creds = read_oauth_creds()
@@ -406,16 +432,16 @@ def resolve_tier() -> str:
   return fetch_console_plan()
 
 
-def probe_limits(agy_path: str, force: bool = False) -> tuple[list[dict[str, Any]], str]:
+def probe_limits(agy_path: str, force: bool = False) -> tuple[list[dict[str, Any]], str, str]:
   cached_data, age = load_cached_limits()
   if not force and cached_data and age < LIMITS_CACHE_SECONDS:
-    return cached_data.get("limits", []), cached_data.get("usageStatusText", "")
+    return cached_data.get("limits", []), cached_data.get("usageStatusText", ""), ""
 
-  data = agy_json(agy_path, ["--print", "/usage"], timeout=12)
+  data, error = agy_json(agy_path, ["--print", "/usage"], timeout=PROBE_TIMEOUT, attempts=2)
   if not data:
     if cached_data:
-      return cached_data.get("limits", []), "Showing cached limits"
-    return [], "Limits unavailable"
+      return cached_data.get("limits", []), "Showing cached limits", error
+    return [], "Limits unavailable", error
 
   catalog = catalog_models(agy_path)
   limits = limits_from_usage(data, catalog)
@@ -424,7 +450,7 @@ def probe_limits(agy_path: str, force: bool = False) -> tuple[list[dict[str, Any
       "usageStatusText": "",
   }
   save_cached_limits(cache_payload)
-  return limits, ""
+  return limits, "", ""
 
 
 def empty_bucket() -> dict[str, int]:
@@ -683,8 +709,13 @@ def build_record(force: bool = False) -> dict[str, Any]:
         "Install the Antigravity CLI to view live quota.",
     )
 
-  limits, status_text = probe_limits(agy_path, force=force)
-  return empty_record(stats, tokens, tier, limits, status_text, AUTH_HELP)
+  limits, status_text, probe_error = probe_limits(agy_path, force=force)
+  if not signed_in() or AUTH_ERROR_RE.search(probe_error or ""):
+    status_text = status_text or "agy is not authenticated"
+    auth_help = AUTH_HELP
+  else:
+    auth_help = status_text
+  return empty_record(stats, tokens, tier, limits, status_text, auth_help)
 
 
 def write_record(force: bool = False) -> None:

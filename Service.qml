@@ -13,6 +13,7 @@ Item {
 
   readonly property string home: Quickshell.env("HOME") || ""
   readonly property string stateHome: Quickshell.env("XDG_STATE_HOME") || (home + "/.local/state")
+  readonly property string claudeRecord: stateHome + "/omarchy/agents/usage/claude.json"
 
   readonly property string pluginDir: {
     if (manifest && manifest.__sourceDir) return String(manifest.__sourceDir)
